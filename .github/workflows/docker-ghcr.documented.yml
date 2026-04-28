@@ -79,7 +79,7 @@ jobs:
         with:
           registry: ${{ env.REGISTRY }}           # ghcr.io
           username: ${{ github.actor }}           # Usuario de GitHub
-          password: ${{ secrets.GITHUB_TOKEN }}   # Token de GitHub (automático)
+          password: ${{ secrets.TOKEN }}   # Token de GitHub (automático)
 
       # ────────────────────────────────────────────────────────────────────
       # Paso 3: Extraer metadata del tag (versión)
