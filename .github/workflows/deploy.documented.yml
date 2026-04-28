@@ -18,9 +18,13 @@ on:
   push:
     branches:
       - main                # Dispara en cada push a main
+  workflow_dispatch:
 
 jobs:
   deploy:
+    environment:
+        name: github-pages
+        url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     
     permissions:
@@ -30,16 +34,17 @@ jobs:
     steps:
       # Checkout del código
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       
       # Desplegar a Pages
       - name: Upload to GitHub Pages
-        uses: actions/upload-pages-artifact@v2
+        uses: actions/upload-pages-artifact@v3
         with:
-          path: '.'           # Publica el directorio raíz
+          path: ./src        # Publica el directorio raíz
       
-      - name: Deploy
-        uses: actions/deploy-pages@v2
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
 
 # ============================================================================
 # NOTAS
