@@ -1,0 +1,160 @@
+# ============================================================================
+# docker-compose.prod.yml
+# ============================================================================
+# Docker Compose para producción
+# (Versión alternativa con configuraciones de producción)
+#
+# DIFERENCIAS respecto a docker-compose.yml:
+#   - Puertos protegidos
+#   - Recursos limitados (memory, cpus)
+#   - Health checks
+#   - Logs rotados
+#   - Reinicio automático
+#   - Datos persistentes con volúmenes named
+#
+# USO: docker compose -f docker-compose.prod.yml up -d
+#
+# ============================================================================
+
+version: "3.9"
+
+services:
+
+  web:
+    image: nginx:alpine
+    container_name: mi-web-prod
+    
+    # Solo puerto 80 (nginx en producción típicamente con reverse proxy delante)
+    ports:
+      - "80:80"
+    
+    volumes:
+      - ./index.html:/usr/share/nginx/html/index.html:ro
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    
+    networks:
+      - mi-red-interna
+    
+    depends_on:
+      - api
+    
+    # ────────────────────────────────────────────────────────────────────
+    # LÍMITES DE RECURSOS
+    # ────────────────────────────────────────────────────────────────────
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'           # Máximo 50% de un CPU
+          memory: 256M          # Máximo 256 MB de RAM
+        reservations:
+          cpus: '0.25'          # Mínimo reservado
+          memory: 128M
+    
+    # ────────────────────────────────────────────────────────────────────
+    # POLÍTICA DE REINICIO
+    # ────────────────────────────────────────────────────────────────────
+    restart_policy:
+      condition: on-failure     # Reinicia si falla
+      delay: 5s
+      max_attempts: 3
+      window: 120s
+    
+    # ────────────────────────────────────────────────────────────────────
+    # HEALTH CHECK
+    # ────────────────────────────────────────────────────────────────────
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    
+    # ────────────────────────────────────────────────────────────────────
+    # LOGGING
+    # ────────────────────────────────────────────────────────────────────
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"        # Máximo 10 MB por log file
+        max-file: "3"          # Máximo 3 archivos rotados
+        labels: "service=web"
+
+  api:
+    image: clue/json-server
+    container_name: mi-api-prod
+    
+    # Sin puertos — API privada
+    volumes:
+      # Usar un volumen named para persistencia de datos
+      - api-data:/data/db.json
+    
+    networks:
+      - mi-red-interna
+    
+    deploy:
+      resources:
+        limits:
+          cpus: '0.3'
+          memory: 512M
+        reservations:
+          cpus: '0.15'
+          memory: 256M
+    
+    restart_policy:
+      condition: on-failure
+      delay: 5s
+      max_attempts: 5
+    
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+        labels: "service=api"
+
+# ============================================================================
+# VOLÚMENES NAMED
+# ============================================================================
+volumes:
+  # Volumen persistente para datos de la API
+  api-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./data
+
+# ============================================================================
+# REDES
+# ============================================================================
+networks:
+  mi-red-interna:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+# ============================================================================
+# COMANDOS ÚTILES PARA PRODUCCIÓN
+# ============================================================================
+#
+# Desplegar en producción:
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# Ver logs con rotación:
+#   docker logs --follow --tail 50 mi-web-prod
+#
+# Monitoreo de recursos:
+#   docker stats mi-web-prod mi-api-prod
+#
+# Hacer backup de datos:
+#   docker run --rm -v mi-app-docker_api-data:/data -v $(pwd):/backup \
+#     alpine tar czf /backup/api-data-$(date +%s).tar.gz /data
+#
+# ============================================================================

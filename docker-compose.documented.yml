@@ -1,0 +1,148 @@
+# ============================================================================
+# docker-compose.yml - Stack Práctica 5: Web + API Local
+# ============================================================================
+# PROPÓSITO: Define la arquitectura de desarrollo con dos contenedores:
+#   1. nginx   : Frontend estático + proxy inverso (puerto 8080)
+#   2. json-server : API REST privada (sin puertos expuestos)
+#
+# REQUISITOS CLAVE:
+#   ✓ API no expuesta al exterior (sin "ports")
+#   ✓ Comunicación solo dentro de la red privada (mi-red-interna)
+#   ✓ nginx actúa como proxy hacia la API (proxy_pass http://api:80/)
+#   ✓ Docker resuelve "api" como hostname dentro de la red
+#
+# USO:
+#   docker compose up -d           # Levantar stack
+#   docker compose ps              # Ver contenedores
+#   docker compose logs -f         # Ver logs en tiempo real
+#   docker compose exec web sh     # Acceder al contenedor web
+#   docker compose down            # Bajar stack
+# ============================================================================
+
+version: "3.9"
+
+# ============================================================================
+# SERVICIOS
+# ============================================================================
+services:
+
+  # ────────────────────────────────────────────────────────────────────────
+  # SERVICIO: web (nginx)
+  # ────────────────────────────────────────────────────────────────────────
+  # Propósito: Frontend estático + proxy inverso
+  # Imagen: nginx:alpine (14 MB, muy ligera)
+  # Puerto: 8080 (accesible desde localhost:8080)
+  #
+  web:
+    image: nginx:alpine
+    container_name: mi-web
+    
+    # ──────────────────────────────────────────────────────────────────────
+    # PUERTOS: Expuesto solo para el frontend
+    # ──────────────────────────────────────────────────────────────────────
+    ports:
+      - "8080:80"           # host:container → localhost:8080 accede al puerto 80 del contenedor
+    
+    # ──────────────────────────────────────────────────────────────────────
+    # VOLÚMENES: Montan archivos locales como solo lectura (:ro)
+    # ──────────────────────────────────────────────────────────────────────
+    volumes:
+      # Index HTML del frontend
+      - ./index.html:/usr/share/nginx/html/index.html:ro
+      
+      # Configuración de nginx con proxy_pass hacia la API
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    
+    # ──────────────────────────────────────────────────────────────────────
+    # RED: Conectado a la red privada mi-red-interna
+    # ──────────────────────────────────────────────────────────────────────
+    networks:
+      - mi-red-interna      # Permite comunicación con 'api' usando hostname "api"
+    
+    # ──────────────────────────────────────────────────────────────────────
+    # DEPENDENCIAS: Espera a que 'api' esté disponible
+    # ──────────────────────────────────────────────────────────────────────
+    depends_on:
+      - api                 # No inicia hasta que 'api' esté arriba
+    
+    # ──────────────────────────────────────────────────────────────────────
+    # METADATA: Etiquetas para identificar el contenedor
+    # ──────────────────────────────────────────────────────────────────────
+    labels:
+      com.example.name: "Frontend Web"
+      com.example.description: "Nginx serving static content + reverse proxy"
+      com.example.version: "1.0"
+      com.example.practice: "5"
+
+  # ────────────────────────────────────────────────────────────────────────
+  # SERVICIO: api (json-server)
+  # ────────────────────────────────────────────────────────────────────────
+  # Propósito: REST API servida desde db.json
+  # Imagen: clue/json-server
+  # Puertos: NINGUNO (solo accesible dentro de la red)
+  #
+  # IMPORTANTE: Sin "ports" → La API NO está expuesta al exterior
+  #             Solo nginx puede acceder a ella usando "http://api:80/"
+  #
+  api:
+    image: clue/json-server
+    container_name: mi-api
+    
+    # ──────────────────────────────────────────────────────────────────────
+    # SIN PUERTOS: API privada, solo accesible desde la red interna
+    # ──────────────────────────────────────────────────────────────────────
+    # ports: []              # Intencionalmente vacío
+    
+    # ──────────────────────────────────────────────────────────────────────
+    # VOLUMEN: Monta db.json con los datos de la API
+    # ──────────────────────────────────────────────────────────────────────
+    volumes:
+      # json-server busca /data/db.json y expone sus claves como endpoints
+      - ./db.json:/data/db.json:ro
+    
+    # ──────────────────────────────────────────────────────────────────────
+    # RED: Conectado a la red privada (misma que web)
+    # ──────────────────────────────────────────────────────────────────────
+    networks:
+      - mi-red-interna      # Docker resuelve "api" como hostname
+    
+    # ──────────────────────────────────────────────────────────────────────
+    # METADATA
+    # ──────────────────────────────────────────────────────────────────────
+    labels:
+      com.example.name: "API REST"
+      com.example.description: "Private API with json-server"
+      com.example.version: "1.0"
+      com.example.practice: "5"
+
+# ============================================================================
+# REDES
+# ============================================================================
+# Red privada (bridge) para comunicación segura entre servicios.
+# Los contenedores pueden referirse entre sí por hostname.
+#
+networks:
+  # ────────────────────────────────────────────────────────────────────────
+  # Red interna: aislada del exterior
+  # ────────────────────────────────────────────────────────────────────────
+  mi-red-interna:
+    driver: bridge          # Tipo de red (por defecto)
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16   # Rango de IPs de la red
+
+# ============================================================================
+# REFERENCIA: Flujo de comunicación
+# ============================================================================
+#
+# 1. Navegador solicita: http://localhost:8080/api/productos
+# 2. nginx recibe en puerto 80 (mapeado a 8080)
+# 3. nginx.conf tiene: location /api/ { proxy_pass http://api:80/; }
+# 4. Docker resuelve "api" como el hostname del contenedor json-server
+# 5. json-server recibe: GET /productos
+# 6. json-server devuelve datos de db.json["productos"]
+# 7. nginx devuelve respuesta al navegador
+#
+# La API NUNCA está expuesta directamente — siempre a través de nginx.
+#
+# ============================================================================

@@ -1,0 +1,142 @@
+# ============================================================================
+# deploy-compose.documented.yml
+# ============================================================================
+# GitHub Actions Workflow: Deploy Docker Compose en máquina local (self-hosted)
+#
+# PROPÓSITO: Automatizar el despliegue del stack Docker Compose en una
+#            máquina con runner self-hosted (tu máquina local).
+#
+# TRIGGERS: Se ejecuta en cada push a la rama 'main'
+#
+# PASOS:
+#   1. Checkout del código actualizado
+#   2. Bajar el stack anterior (docker compose down)
+#   3. Levantar el stack nuevo (docker compose up -d)
+#   4. Mostrar estado de los contenedores
+#
+# REQUISITOS PREVIOS:
+#   - Máquina con Docker instalado
+#   - GitHub Actions Runner configurado como self-hosted
+#   - Runner debe estar en la misma carpeta donde está docker-compose.yml
+#
+# ============================================================================
+
+name: Deploy Compose en máquina local
+
+# ============================================================================
+# TRIGGERS (Eventos que disparan el workflow)
+# ============================================================================
+on:
+  push:
+    branches:
+      - main                # Se ejecuta en cada push a main
+
+# ============================================================================
+# JOBS (Trabajos a ejecutar)
+# ============================================================================
+jobs:
+
+  # ────────────────────────────────────────────────────────────────────────
+  # Job: deploy
+  # ────────────────────────────────────────────────────────────────────────
+  # Despliega el stack Docker Compose en la máquina local (self-hosted)
+  #
+  deploy:
+    # ──────────────────────────────────────────────────────────────────────
+    # RUNNER: self-hosted
+    # ──────────────────────────────────────────────────────────────────────
+    # Ejecuta en una máquina local (no en GitHub), usando el runner
+    # que debe estar registrado en: Settings > Actions > Runners
+    #
+    runs-on: self-hosted
+
+    # ──────────────────────────────────────────────────────────────────────
+    # PASOS DEL WORKFLOW
+    # ──────────────────────────────────────────────────────────────────────
+    steps:
+
+      # ────────────────────────────────────────────────────────────────────
+      # Paso 1: Checkout del repositorio
+      # ────────────────────────────────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4         # Descargar el código actualizado
+        with:
+          fetch-depth: 1                  # Solo el último commit
+
+      # ────────────────────────────────────────────────────────────────────
+      # Paso 2: Bajar el stack anterior
+      # ────────────────────────────────────────────────────────────────────
+      # Detiene y elimina los contenedores anteriores (limpia recursos)
+      #
+      - name: Bajar stack anterior
+        run: |
+          docker compose down --remove-orphans
+        # Opciones:
+        #   --remove-orphans : Elimina contenedores que no están en docker-compose.yml
+        # Nota: Si no hay stack levantado, mostrará error but no falla el workflow
+
+      # ────────────────────────────────────────────────────────────────────
+      # Paso 3: Levantar stack nuevo
+      # ────────────────────────────────────────────────────────────────────
+      # Inicia los contenedores definidos en docker-compose.yml
+      #
+      - name: Levantar stack
+        run: |
+          docker compose up -d
+        # Opciones:
+        #   -d : Detached mode (corre en background)
+
+      # ────────────────────────────────────────────────────────────────────
+      # Paso 4: Mostrar estado del stack
+      # ────────────────────────────────────────────────────────────────────
+      # Verifica que ambos contenedores estén running
+      #
+      - name: Estado del stack
+        run: |
+          docker compose ps
+        # Salida esperada:
+        #   NAME         STATUS         PORTS
+        #   mi-web       Up X minutes   0.0.0.0:8080->80/tcp
+        #   mi-api       Up X minutes   
+
+# ============================================================================
+# CONFIGURACIÓN DEL SELF-HOSTED RUNNER
+# ============================================================================
+#
+# Para que este workflow funcione, necesitas:
+#
+# 1. Descargar el runner de GitHub (Settings > Actions > Runners)
+# 2. Configurar el runner en tu máquina:
+#    ./config.sh --url https://github.com/USUARIO/REPO --token TOKEN
+# 3. Iniciar el runner:
+#    ./run.sh
+# 4. El runner debe estar siempre en ejecución (o usar supervisor)
+#
+# ============================================================================
+
+# ============================================================================
+# VARIABLES DE ENTORNO ÚTILES (Descomentar si necesitas)
+# ============================================================================
+# env:
+#   COMPOSE_PROJECT_NAME: mi-app-docker
+#   COMPOSE_FILE: docker-compose.yml
+#   DOCKER_CLIENT_TIMEOUT: 120
+#   COMPOSE_HTTP_TIMEOUT: 120
+
+# ============================================================================
+# REFERENCIAS
+# ============================================================================
+#
+# Flujo completo:
+#   1. Haces push a main
+#   2. GitHub dispara este workflow
+#   3. El self-hosted runner lo ejecuta en tu máquina
+#   4. El stack Docker Compose se reinicia automáticamente
+#   5. Resultado: http://localhost:8080 tiene el código actualizado
+#
+# Verificar el despliegue:
+#   docker compose logs -f          # Ver logs en tiempo real
+#   docker compose ps               # Ver contenedores
+#   curl http://localhost:8080      # Probar el frontend
+#
+# ============================================================================

@@ -1,0 +1,55 @@
+# ============================================================================
+# .github/workflows/deploy.documented.yml
+# ============================================================================
+# GitHub Actions Workflow: Deploy a GitHub Pages
+# (Flujo adicional para desplegar el frontend en GitHub Pages)
+#
+# PROPÓSITO: Publica la rama 'dist' automáticamente en GitHub Pages
+#
+# TRIGGERS: Push a main (construye y despliega automáticamente)
+#
+# RESULTADO: Sitio disponible en https://usuario.github.io/repo
+#
+# ============================================================================
+
+name: Deploy a GitHub Pages
+
+on:
+  push:
+    branches:
+      - main                # Dispara en cada push a main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    permissions:
+      pages: write
+      id-token: write
+    
+    steps:
+      # Checkout del código
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      # Desplegar a Pages
+      - name: Upload to GitHub Pages
+        uses: actions/upload-pages-artifact@v2
+        with:
+          path: '.'           # Publica el directorio raíz
+      
+      - name: Deploy
+        uses: actions/deploy-pages@v2
+
+# ============================================================================
+# NOTAS
+# ============================================================================
+#
+# Para habilitar GitHub Pages:
+#   1. Settings > Pages
+#   2. Source: GitHub Actions
+#   3. Guardar
+#
+# Sitio disponible en: https://usuario.github.io/repo
+#
+# ============================================================================

@@ -1,0 +1,124 @@
+# ============================================================================
+# docker-ghcr.documented.yml
+# ============================================================================
+# GitHub Actions Workflow: Build y Publish imagen Docker en GHCR
+#
+# PROPÓSITO: Automatizar la construcción y publicación de la imagen Docker
+#            en GitHub Container Registry cuando se crea un tag de versión.
+#
+# TRIGGERS: Se ejecuta cuando se hace push de un tag v*.*.* (v1.0.0, etc.)
+#
+# PASOS:
+#   1. Checkout del repositorio
+#   2. Login en GHCR (GitHub Container Registry)
+#   3. Extraer metadata del tag
+#   4. Build y push de la imagen con etiquetas de versión
+#
+# RESULTADO: Imagen disponible en ghcr.io/usuario/repo con etiquetas:
+#   - v1.0.0 (versión exacta)
+#   - 1.0 (versión menor)
+#   - latest (más reciente)
+#
+# ============================================================================
+
+name: Build y Publish imagen Docker en GHCR
+
+# ============================================================================
+# TRIGGERS (Eventos que disparan el workflow)
+# ============================================================================
+on:
+  push:
+    tags:
+      - 'v*.*.*'        # Se ejecuta cuando se hace push de tags v1.0.0, v2.1.3, etc.
+
+# ============================================================================
+# VARIABLES DE ENTORNO
+# ============================================================================
+env:
+  REGISTRY: ghcr.io                     # Registro de GitHub Container
+  IMAGE_NAME: ${{ github.repository }}  # usuario/repo
+
+# ============================================================================
+# JOBS (Trabajos a ejecutar)
+# ============================================================================
+jobs:
+
+  # ────────────────────────────────────────────────────────────────────────
+  # Job: build-and-push
+  # ────────────────────────────────────────────────────────────────────────
+  # Construye la imagen Docker y la publica en GHCR
+  #
+  build-and-push:
+    runs-on: ubuntu-latest      # Ejecutor: máquina Ubuntu en GitHub
+    
+    # ──────────────────────────────────────────────────────────────────────
+    # PERMISOS: Necesarios para acceder al repo y GHCR
+    # ──────────────────────────────────────────────────────────────────────
+    permissions:
+      contents: read            # Leer contenido del repositorio
+      packages: write           # Escribir en GitHub Packages/GHCR
+
+    # ──────────────────────────────────────────────────────────────────────
+    # PASOS DEL WORKFLOW
+    # ──────────────────────────────────────────────────────────────────────
+    steps:
+
+      # ────────────────────────────────────────────────────────────────────
+      # Paso 1: Checkout del repositorio
+      # ────────────────────────────────────────────────────────────────────
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4         # Descargar el código del repo
+        with:
+          fetch-depth: 0                  # Obtener todo el historial
+
+      # ────────────────────────────────────────────────────────────────────
+      # Paso 2: Login en GitHub Container Registry
+      # ────────────────────────────────────────────────────────────────────
+      - name: Login a GitHub Container Registry
+        uses: docker/login-action@v3      # Action para login en Docker Registry
+        with:
+          registry: ${{ env.REGISTRY }}           # ghcr.io
+          username: ${{ github.actor }}           # Usuario de GitHub
+          password: ${{ secrets.GITHUB_TOKEN }}   # Token de GitHub (automático)
+
+      # ────────────────────────────────────────────────────────────────────
+      # Paso 3: Extraer metadata del tag (versión)
+      # ────────────────────────────────────────────────────────────────────
+      - name: Extraer metadata de la imagen
+        id: meta
+        uses: docker/metadata-action@v5   # Genera tags automáticamente
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=semver,pattern={{version}}    # v1.0.0 → 1.0.0
+            type=semver,pattern={{major}}.{{minor}}   # v1.0.0 → 1.0
+            type=raw,value=latest             # Siempre agrega 'latest'
+
+      # ────────────────────────────────────────────────────────────────────
+      # Paso 4: Build y Push de la imagen
+      # ────────────────────────────────────────────────────────────────────
+      - name: Build y Push imagen
+        uses: docker/build-push-action@v5
+        with:
+          context: .                         # Directorio con Dockerfile
+          push: true                         # Enviar a GHCR
+          tags: ${{ steps.meta.outputs.tags }}         # Etiquetas del paso 3
+          labels: ${{ steps.meta.outputs.labels }}     # Metadata
+
+# ============================================================================
+# REFERENCIAS
+# ============================================================================
+#
+# 1. Cómo crear un tag y disparar el workflow:
+#    git tag -a v1.0.0 -m "Release 1.0.0"
+#    git push origin v1.0.0
+#
+# 2. Resultado en GHCR:
+#    ghcr.io/usuario/mi-app-docker:1.0.0
+#    ghcr.io/usuario/mi-app-docker:1.0
+#    ghcr.io/usuario/mi-app-docker:latest
+#
+# 3. Descargar la imagen:
+#    docker pull ghcr.io/usuario/mi-app-docker:1.0.0
+#
+# ============================================================================
